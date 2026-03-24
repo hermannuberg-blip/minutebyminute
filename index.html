@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Agente MinuteByMinute</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0F0F13;
+  --surface: #1A1A22;
+  --surface2: #22222E;
+  --border: #2E2E3E;
+  --accent: #7C6AF7;
+  --accent2: #F76A8A;
+  --gold: #F7C96A;
+  --green: #6AF7B0;
+  --text: #F0EFF8;
+  --muted: #8888AA;
+  --shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; max-width:480px; margin:0 auto; overflow-x:hidden; }
+
+body::before {
+  content:''; position:fixed; top:-200px; left:50%; transform:translateX(-50%);
+  width:600px; height:600px; border-radius:50%;
+  background:radial-gradient(circle,rgba(124,106,247,0.12) 0%,transparent 70%);
+  pointer-events:none; z-index:0;
+}
+
+header {
+  position:sticky; top:0; z-index:100;
+  background:rgba(15,15,19,0.85); backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:16px 20px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.logo { display:flex; align-items:center; gap:10px; }
+.logo-mark { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:1.1rem; }
+.logo h1 { font-family:'Instrument Serif',serif; font-size:1.15rem; color:var(--text); }
+.logo p { font-size:0.65rem; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+.sync-badge { background:rgba(106,247,176,0.1); border:1px solid rgba(106,247,176,0.25); border-radius:20px; padding:4px 12px; font-size:0.68rem; color:var(--green); letter-spacing:0.5px; cursor:pointer; }
+.sync-badge.syncing { background:rgba(247,201,106,0.1); border-color:rgba(247,201,106,0.25); color:var(--gold); animation:pulse-badge 1s infinite; }
+.sync-badge.error { background:rgba(247,106,138,0.1); border-color:rgba(247,106,138,0.25); color:var(--accent2); }
+@keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+main { padding:20px 16px 100px; position:relative; z-index:1; }
+
+.mic-section { text-align:center; padding:32px 0 24px; }
+.mic-ring {
+  width:120px; height:120px; border-radius:50%; margin:0 auto 16px;
+  background:var(--surface2); border:2px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; cursor:pointer; transition:all 0.3s;
+}
+.mic-ring.listening { background:rgba(124,106,247,0.15); border-color:var(--accent); animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(124,106,247,0.4)} 70%{box-shadow:0 0 0 20px rgba(124,106,247,0)} 100%{box-shadow:0 0 0 0 rgba(124,106,247,0)} }
+.mic-ring.processing { border-color:var(--gold); }
+.mic-icon { font-size:2.5rem; transition:transform 0.2s; }
+.mic-ring:active .mic-icon { transform:scale(0.9); }
+.mic-label { font-size:0.8rem; color:var(--muted); margin-bottom:6px; }
+.mic-hint { font-size:0.72rem; color:var(--border); }
+
+.transcript-box {
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; margin-bottom:20px; min-height:60px;
+  font-size:0.88rem; color:var(--muted); font-style:italic; line-height:1.6;
+  display:none;
+}
+.transcript-box.active { display:block; color:var(--text); font-style:normal; }
+.transcript-cursor { display:inline-block; width:2px; height:14px; background:var(--accent); margin-left:2px; vertical-align:middle; animation:blink 0.8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+.confirm-card {
+  background:var(--surface); border:1px solid var(--accent);
+  border-radius:18px; padding:20px; margin-bottom:20px;
+  display:none; animation:slideUp 0.3s ease;
+}
+.confirm-card.visible { display:block; }
+@keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.confirm-title { font-family:'Instrument Serif',serif; font-size:1rem; color:var(--accent); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.confirm-grid { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+.confirm-field { display:flex; align-items:center; gap:10px; }
+.cf-label { font-size:0.65rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; min-width:90px; }
+.cf-input {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:8px 10px; font-family:'Plus Jakarta Sans',sans-serif; font-size:0.85rem;
+  color:var(--text); outline:none; flex:1; transition:border 0.2s;
+}
+.cf-input:focus { border-color:var(--accent); }
+.cf-select {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:8px 10px; font-family:'Plus Jakarta Sans',sans-serif; font-size:0.85rem;
+  color:var(--text); outline:none; flex:1; appearance:none; cursor:pointer;
+}
+
+.confirm-actions { display:flex; gap:10px; }
+.btn-cancel { flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Plus Jakarta Sans',sans-serif; font-weight:600; font-size:0.85rem; cursor:pointer; }
+.btn-save { flex:2; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--accent),#9C6AF7); color:white; font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:0.85rem; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px; }
+.btn-save:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(124,106,247,0.4); }
+.btn-save:disabled { opacity:0.6; transform:none; cursor:not-allowed; }
+
+.text-input-section { margin-bottom:20px; }
+.divider { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+.divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.divider span { font-size:0.7rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+.text-input-wrap { position:relative; }
+.text-input-wrap textarea {
+  width:100%; padding:14px 50px 14px 16px;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  font-family:'Plus Jakarta Sans',sans-serif; font-size:0.88rem; color:var(--text);
+  outline:none; resize:none; height:80px; line-height:1.5; transition:border 0.2s;
+}
+.text-input-wrap textarea:focus { border-color:var(--accent); }
+.text-input-wrap textarea::placeholder { color:var(--muted); }
+.send-btn { position:absolute; right:12px; bottom:12px; width:34px; height:34px; border-radius:10px; border:none; background:var(--accent); color:white; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+.send-btn:hover { background:#9C6AF7; }
+
+.lista-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.lista-header h2 { font-family:'Instrument Serif',serif; font-size:1.1rem; }
+.lista-count { background:var(--surface2); border-radius:20px; padding:3px 10px; font-size:0.72rem; color:var(--muted); }
+
+.filtros { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-bottom:14px; }
+.filtros::-webkit-scrollbar { display:none; }
+.filtro-chip { padding:5px 13px; border-radius:20px; border:1px solid var(--border); font-size:0.72rem; font-weight:600; cursor:pointer; background:transparent; color:var(--muted); white-space:nowrap; transition:all 0.2s; flex-shrink:0; }
+.filtro-chip.active { background:var(--accent); color:white; border-color:var(--accent); }
+
+.actividades { display:flex; flex-direction:column; gap:10px; }
+.act-item { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; display:flex; gap:12px; align-items:flex-start; animation:fadeIn 0.3s ease; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.act-checkbox { width:20px; height:20px; border-radius:6px; border:2px solid var(--border); cursor:pointer; flex-shrink:0; margin-top:1px; accent-color:var(--accent); }
+.act-body { flex:1; min-width:0; }
+.act-happening { font-weight:600; font-size:0.92rem; margin-bottom:5px; }
+.act-meta { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.meta-tag { font-size:0.65rem; font-weight:700; padding:2px 8px; border-radius:6px; }
+.tag-cat-erre { background:rgba(124,106,247,0.12); color:var(--accent); }
+.tag-cat-helen { background:rgba(247,201,106,0.12); color:var(--gold); }
+.tag-cat-familiar { background:rgba(106,247,176,0.12); color:var(--green); }
+.tag-cat-personal { background:rgba(247,106,138,0.12); color:var(--accent2); }
+.tag-lugar { background:rgba(255,255,255,0.06); color:var(--muted); }
+.hora-tag { font-size:0.68rem; color:var(--gold); font-weight:700; background:rgba(247,201,106,0.1); padding:2px 8px; border-radius:6px; }
+.sheets-badge { font-size:0.62rem; background:rgba(106,247,176,0.08); color:var(--green); border:1px solid rgba(106,247,176,0.2); padding:2px 7px; border-radius:6px; }
+.act-del { background:transparent; border:none; color:var(--border); cursor:pointer; font-size:0.85rem; padding:4px; transition:color 0.2s; }
+.act-del:hover { color:var(--accent2); }
+
+.empty-state { text-align:center; padding:40px 20px; color:var(--muted); }
+.empty-state .big { font-size:3rem; margin-bottom:10px; }
+.empty-state p { font-size:0.85rem; line-height:1.6; }
+
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--accent); color:var(--text); padding:10px 20px; border-radius:20px; font-size:0.82rem; font-weight:600; z-index:999; opacity:0; transition:opacity 0.3s; white-space:nowrap; box-shadow:var(--shadow); }
+.toast.show { opacity:1; }
+
+/* Config modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:500; display:none; align-items:flex-end; }
+.modal-overlay.open { display:flex; }
+.modal-box { background:var(--surface); border:1px solid var(--border); border-radius:24px 24px 0 0; width:100%; padding:24px 20px 40px; animation:slideUp 0.3s ease; }
+.modal-box h3 { font-family:'Instrument Serif',serif; font-size:1.1rem; margin-bottom:16px; }
+.modal-field { margin-bottom:14px; }
+.modal-field label { font-size:0.7rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; display:block; margin-bottom:6px; }
+.modal-field input { width:100%; padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; font-family:'Plus Jakarta Sans',sans-serif; font-size:0.85rem; color:var(--text); outline:none; transition:border 0.2s; }
+.modal-field input:focus { border-color:var(--accent); }
+.modal-note { font-size:0.75rem; color:var(--muted); line-height:1.6; margin-bottom:16px; background:rgba(124,106,247,0.08); border-radius:10px; padding:10px 12px; }
+.modal-actions { display:flex; gap:10px; }
+.btn-modal-cancel { flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Plus Jakarta Sans',sans-serif; font-weight:600; font-size:0.85rem; cursor:pointer; }
+.btn-modal-save { flex:2; padding:12px; border-radius:12px; border:none; background:var(--accent); color:white; font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:0.85rem; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">📋</div>
+    <div>
+      <h1>MinuteByMinute</h1>
+      <p>Agente de actividades</p>
+    </div>
+  </div>
+  <div class="sync-badge" id="syncBadge" onclick="openConfig()">⚙️ Configurar</div>
+</header>
+
+<main>
+  <div class="mic-section">
+    <div class="mic-ring" id="micRing" onclick="toggleMic()">
+      <div class="mic-icon" id="micIcon">🎙️</div>
+    </div>
+    <div class="mic-label" id="micLabel">Toca para hablar</div>
+    <div class="mic-hint" id="micHint">Toca, habla y se procesa automático</div>
+  </div>
+
+  <div class="transcript-box" id="transcriptBox">
+    <span id="transcriptText"></span>
+    <span class="transcript-cursor" id="transcriptCursor" style="display:none"></span>
+  </div>
+
+  <div class="confirm-card" id="confirmCard">
+    <div class="confirm-title">✨ Confirma la actividad</div>
+    <div class="confirm-grid" id="confirmGrid"></div>
+    <div class="confirm-actions">
+      <button class="btn-cancel" onclick="cancelarConfirm()">✕ Cancelar</button>
+      <button class="btn-save" id="btnSave" onclick="guardarActividad()">
+        <span id="btnSaveIcon">📋</span>
+        <span id="btnSaveText">Guardar en Google Sheets</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="text-input-section">
+    <div class="divider"><span>o escribe</span></div>
+    <div class="text-input-wrap">
+      <textarea id="textInput" placeholder='Ej: "ErreEme viernes recoger dinero en Centro con AMorales, responsable Rocio"'></textarea>
+      <button class="send-btn" onclick="procesarTexto()">→</button>
+    </div>
+  </div>
+
+  <div class="lista-header">
+    <h2>Actividades guardadas</h2>
+    <span class="lista-count" id="listaCount">0</span>
+  </div>
+  <div class="filtros">
+    <button class="filtro-chip active" onclick="setFiltro('todos',this)">Todas</button>
+    <button class="filtro-chip" onclick="setFiltro('ErreEme',this)">🏢 ErreEme</button>
+    <button class="filtro-chip" onclick="setFiltro('Helen',this)">👧 Helen</button>
+    <button class="filtro-chip" onclick="setFiltro('Familiar',this)">👨‍👩‍👧 Familiar</button>
+    <button class="filtro-chip" onclick="setFiltro('Personal',this)">👤 Personal</button>
+    <button class="filtro-chip" onclick="setFiltro('Lunch&Joy',this)">🌸 Lunch&Joy</button>
+  </div>
+  <div class="actividades" id="actList"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<!-- Config Modal -->
+<div class="modal-overlay" id="configModal" onclick="closeConfigIfOutside(event)">
+  <div class="modal-box">
+    <h3>⚙️ Conectar Google Sheets</h3>
+    <div class="modal-note">
+      Pega la URL de tu Google Apps Script Web App para que las actividades se guarden directo en tu Excel.
+    </div>
+    <div class="modal-field">
+      <label>URL de Apps Script</label>
+      <input type="url" id="configUrl" placeholder="https://script.google.com/macros/s/...">
+    </div>
+    <div class="modal-field">
+      <label>Nombre de la hoja</label>
+      <input type="text" id="configSheet" placeholder="MinuteByMinuteApp" value="MinuteByMinuteApp">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeConfig()">Cancelar</button>
+      <button class="btn-modal-save" onclick="saveConfig()">Guardar configuración</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──
+const SCRIPT_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbwkyqbQwUORGGJtiDYZ_5IwVHnRZYlTK9hX5NN72zvxEDJZo5Yo6D3OzNP_RBbDGBxU/exec';
+const SHEET_NAME_DEFAULT = 'MinuteByMinuteApp';
+
+let config = {
+  scriptUrl: SCRIPT_URL_DEFAULT,
+  sheetName: SHEET_NAME_DEFAULT,
+};
+// Intentar cargar desde localStorage si existe
+try {
+  const savedUrl = localStorage.getItem('mbm-script-url');
+  const savedSheet = localStorage.getItem('mbm-sheet-name');
+  if (savedUrl) config.scriptUrl = savedUrl;
+  if (savedSheet) config.sheetName = savedSheet;
+} catch(e) {}
+
+function updateSyncBadge() {
+  const badge = document.getElementById('syncBadge');
+  if (config.scriptUrl && config.scriptUrl !== '') {
+    badge.textContent = '● Google Sheets';
+    badge.className = 'sync-badge';
+    badge.style.background = 'rgba(106,247,176,0.1)';
+    badge.style.borderColor = 'rgba(106,247,176,0.25)';
+    badge.style.color = 'var(--green)';
+  } else {
+    badge.textContent = '⚙️ Configurar';
+    badge.className = 'sync-badge';
+  }
+}
+
+// Config modal
+function openConfig() {
+  document.getElementById('configUrl').value = config.scriptUrl || '';
+  document.getElementById('configSheet').value = config.sheetName || SHEET_NAME_DEFAULT;
+  document.getElementById('configModal').classList.add('open');
+}
+function closeConfig() { document.getElementById('configModal').classList.remove('open'); }
+function closeConfigIfOutside(e) { if(e.target===document.getElementById('configModal')) closeConfig(); }
+function saveConfig() {
+  config.scriptUrl = document.getElementById('configUrl').value.trim() || SCRIPT_URL_DEFAULT;
+  config.sheetName = document.getElementById('configSheet').value.trim() || SHEET_NAME_DEFAULT;
+  try {
+    localStorage.setItem('mbm-script-url', config.scriptUrl);
+    localStorage.setItem('mbm-sheet-name', config.sheetName);
+  } catch(e) {}
+  updateSyncBadge();
+  closeConfig();
+  showToast('✅ Configuración guardada');
+}
+
+// ── STATE ──
+let actividades = [];
+let filtroActivo = 'todos';
+let recognition = null;
+let isListening = false;
+let pendingActivity = null;
+
+function loadData() {
+  try { actividades = JSON.parse(localStorage.getItem('mbm-actividades')||'[]'); } catch(e) { actividades=[]; }
+  renderLista();
+}
+function saveLocal(act) {
+  actividades.unshift(act);
+  localStorage.setItem('mbm-actividades', JSON.stringify(actividades));
+}
+
+// ── GOOGLE SHEETS SYNC ──
+async function syncToSheets(act) {
+  if (!config.scriptUrl) return { ok: false, reason: 'no-url' };
+
+  const badge = document.getElementById('syncBadge');
+  badge.className = 'sync-badge syncing';
+  badge.textContent = '↑ Sincronizando...';
+
+  const payload = {
+    hora: act.hora || '',
+    categoria: act.categoria || '',
+    happening: act.happening || '',
+    area: act.area || '',
+    responsable: act.responsable || '',
+    fechaTexto: act.fechaTexto || act.fecha || '',
+    fecha: act.fecha || '',
+    notas: act.notas || ''
+  };
+
+  const url = config.scriptUrl + '?data=' + encodeURIComponent(JSON.stringify(payload));
+
+  try {
+    // Intentar fetch normal primero
+    const res = await fetch(url, { method: 'GET', mode: 'cors' });
+    const json = await res.json();
+    updateSyncBadge();
+    return json.success ? { ok: true } : { ok: false, reason: json.error };
+  } catch(e1) {
+    try {
+      // Fallback: no-cors (no devuelve respuesta pero ejecuta el script)
+      await fetch(url, { method: 'GET', mode: 'no-cors' });
+      // Esperar 3s para que el script ejecute
+      await new Promise(r => setTimeout(r, 3000));
+      updateSyncBadge();
+      return { ok: true };
+    } catch(e2) {
+      updateSyncBadge();
+      return { ok: false, reason: e2.message };
+    }
+  }
+}
+
+// ── SPEECH ──
+function initSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('micLabel').textContent='Voz no disponible en este navegador'; return; }
+  recognition = new SR();
+  recognition.lang = 'es-MX';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  let silenceTimer = null;
+  let lastFinal = '';
+
+  recognition.onstart = () => { isListening=true; setMicState('listening'); lastFinal=''; };
+  recognition.onresult = (e) => {
+    let interim='', final='';
+    for (let i=e.resultIndex; i<e.results.length; i++) {
+      if (e.results[i].isFinal) final+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    showTranscript(final||interim, !final);
+    if (final) lastFinal = final;
+    // Auto-detener si hay resultado final
+    if (final) {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        if (isListening) {
+          recognition.stop();
+          isListening = false;
+          setMicState('processing');
+        }
+      }, 5000);
+    }
+  };
+  recognition.onerror = (err) => { 
+    clearTimeout(silenceTimer);
+    setMicState('idle'); 
+    isListening=false; 
+    if (err.error !== 'no-speech') showToast('⚠️ Error de micrófono: '+err.error); 
+  };
+  recognition.onend = () => {
+    clearTimeout(silenceTimer);
+    const txt = lastFinal || document.getElementById('transcriptText').textContent.trim();
+    if (txt && isListening) { isListening=false; procesarVoz(txt); }
+    else { isListening=false; setMicState('idle'); }
+  };
+}
+
+function toggleMic() {
+  if (!recognition) { initSpeech(); if(!recognition){showToast('⚠️ Abre en Chrome para usar el micrófono');return;} }
+  if (isListening) {
+    recognition.stop();
+    isListening = false;
+    setMicState('idle');
+    const txt = document.getElementById('transcriptText').textContent.trim();
+    if (txt) setTimeout(()=>procesarVoz(txt), 300);
+    return;
+  }
+  try { recognition.start(); } catch(e) { showToast('⚠️ Activa el micrófono en tu navegador'); }
+}
+
+function startMic() {}
+function stopMic() {}
+
+function setMicState(state) {
+  const ring=document.getElementById('micRing'), icon=document.getElementById('micIcon');
+  const label=document.getElementById('micLabel'), hint=document.getElementById('micHint');
+  ring.className='mic-ring '+(state==='listening'?'listening':state==='processing'?'processing':'');
+  if(state==='listening'){icon.textContent='⏹';label.textContent='Escuchando...';hint.textContent='Habla ahora — toca para detener';}
+  else if(state==='processing'){icon.textContent='⚙️';label.textContent='Interpretando...';hint.textContent='El agente está procesando tu actividad';}
+  else{icon.textContent='🎙️';label.textContent='Toca para hablar';hint.textContent='Toca, habla y se procesa automático';}
+}
+
+function showTranscript(text, interim) {
+  const box=document.getElementById('transcriptBox'), txt=document.getElementById('transcriptText'), cur=document.getElementById('transcriptCursor');
+  box.className='transcript-box active'; txt.textContent=text; cur.style.display=interim?'inline-block':'none';
+}
+
+async function procesarVoz(texto) { setMicState('processing'); await interpretarConIA(texto); setMicState('idle'); }
+async function procesarTexto() {
+  const txt=document.getElementById('textInput').value.trim();
+  if(!txt)return;
+  showTranscript(txt,false);
+  await interpretarConIA(txt);
+  document.getElementById('textInput').value='';
+}
+document.getElementById('textInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();procesarTexto();}});
+
+async function interpretarConIA(texto) {
+  const hoy = new Date();
+  const diaStr = hoy.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  const prompt = `Eres un asistente de agenda familiar mexicana. Extrae info de esta instrucción y devuelve SOLO JSON sin markdown ni explicaciones.
+
+Instrucción: "${texto}"
+Hoy es: ${diaStr}
+
+Categorías: ErreEme (negocio de Rocío), Helen (hija), Familiar, Personal, Lunch&Joy
+Responsables: ErreEme, Rocio, Ambos, R+H
+Si dice "yo" = ErreEme. "Herman" = ErreEme.
+
+JSON requerido:
+{
+  "happening": "descripción clara",
+  "categoria": "ErreEme|Helen|Familiar|Personal|Lunch&Joy",
+  "area": "lugar",
+  "responsable": "ErreEme|Rocio|Ambos|R+H",
+  "fecha": "YYYY-MM-DD",
+  "fechaTexto": "jueves, marzo 12, 2026",
+  "hora": "HH:MM o vacío",
+  "notas": "detalles extra o vacío"
+}
+
+Reglas de fecha: "siguiente viernes" = próximo viernes. "mañana" = mañana. Si no menciona fecha usa hoy.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:500,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.map(c=>c.text||'').join('');
+    const clean = raw.replace(/```json|```/g,'').trim();
+    mostrarConfirmacion(JSON.parse(clean));
+  } catch(e) {
+    mostrarConfirmacion(parseoLocal(texto));
+  }
+}
+
+function parseoLocal(texto) {
+  const t=texto.toLowerCase();
+  const cats={erreme:'ErreEme','erre eme':'ErreEme',helen:'Helen',familiar:'Familiar',personal:'Personal',lunch:'Lunch&Joy'};
+  let categoria='ErreEme';
+  for(const[k,v]of Object.entries(cats)){if(t.includes(k)){categoria=v;break;}}
+  const resps={rocio:'Rocio','rocío':'Rocio',ambos:'Ambos','r+h':'R+H',herman:'ErreEme'};
+  let responsable='ErreEme';
+  for(const[k,v]of Object.entries(resps)){if(t.includes(k)){responsable=v;break;}}
+  const hoy=new Date();
+  let fecha=hoy.toISOString().split('T')[0];
+  if(t.includes('mañana')){const m=new Date(hoy);m.setDate(m.getDate()+1);fecha=m.toISOString().split('T')[0];}
+  else if(t.includes('viernes')){const d=new Date(hoy);while(d.getDay()!==5)d.setDate(d.getDate()+1);if(t.includes('siguiente')||t.includes('próximo'))d.setDate(d.getDate()+7);fecha=d.toISOString().split('T')[0];}
+  else if(t.includes('lunes')){const d=new Date(hoy);while(d.getDay()!==1)d.setDate(d.getDate()+1);fecha=d.toISOString().split('T')[0];}
+  const fechaTexto=new Date(fecha+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return{happening:texto,categoria,area:'',responsable,fecha,fechaTexto,hora:'',notas:''};
+}
+
+function mostrarConfirmacion(data) {
+  pendingActivity=data;
+  document.getElementById('confirmGrid').innerHTML=`
+    <div class="confirm-field">
+      <span class="cf-label">Actividad</span>
+      <input class="cf-input" id="cf_happening" value="${esc(data.happening)}">
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Categoría</span>
+      <select class="cf-select" id="cf_categoria">
+        ${['ErreEme','Helen','Familiar','Personal','Lunch&Joy'].map(c=>`<option value="${c}" ${c===data.categoria?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Área / Lugar</span>
+      <input class="cf-input" id="cf_area" value="${esc(data.area)}" placeholder="HEB, Centro, Casa...">
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Responsable</span>
+      <select class="cf-select" id="cf_responsable">
+        ${['ErreEme','Rocio','Ambos','R+H'].map(r=>`<option value="${r}" ${r===data.responsable?'selected':''}>${r}</option>`).join('')}
+      </select>
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Fecha</span>
+      <input class="cf-input" id="cf_fecha" type="date" value="${data.fecha||hoyISO()}">
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Hora</span>
+      <input class="cf-input" id="cf_hora" value="${esc(data.hora)}" placeholder="10:30">
+    </div>
+    <div class="confirm-field">
+      <span class="cf-label">Notas</span>
+      <input class="cf-input" id="cf_notas" value="${esc(data.notas)}" placeholder="Detalles...">
+    </div>`;
+  document.getElementById('confirmCard').className='confirm-card visible';
+  document.getElementById('confirmCard').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function guardarActividad() {
+  const happening=document.getElementById('cf_happening').value.trim();
+  if(!happening){showToast('⚠️ Escribe la actividad');return;}
+
+  const fechaVal=document.getElementById('cf_fecha').value;
+  const fechaTexto=fechaVal?new Date(fechaVal+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'';
+
+  const act={
+    id:Date.now().toString(),
+    happening,
+    categoria:document.getElementById('cf_categoria').value,
+    area:document.getElementById('cf_area').value.trim(),
+    responsable:document.getElementById('cf_responsable').value,
+    fecha:fechaVal,
+    fechaTexto,
+    hora:document.getElementById('cf_hora').value.trim(),
+    notas:document.getElementById('cf_notas').value.trim(),
+    done:false,
+    synced:false,
+    createdAt:new Date().toISOString()
+  };
+
+  // Deshabilitar botón mientras guarda
+  const btn=document.getElementById('btnSave');
+  btn.disabled=true;
+  document.getElementById('btnSaveText').textContent='Guardando...';
+  document.getElementById('btnSaveIcon').textContent='⏳';
+
+  // Guardar local primero
+  saveLocal(act);
+
+  // Sync a Google Sheets
+  if(config.scriptUrl) {
+    const result=await syncToSheets(act);
+    if(result.ok) {
+      act.synced=true;
+      localStorage.setItem('mbm-actividades',JSON.stringify(actividades));
+      showToast('✅ Guardado en Google Sheets');
+    } else {
+      showToast('💾 Guardado local (sin conexión a Sheets)');
+    }
+  } else {
+    showToast('💾 Guardado local — configura Google Sheets');
+  }
+
+  renderLista();
+  cancelarConfirm();
+  document.getElementById('transcriptBox').className='transcript-box';
+  btn.disabled=false;
+  document.getElementById('btnSaveText').textContent='Guardar en Google Sheets';
+  document.getElementById('btnSaveIcon').textContent='📋';
+}
+
+function cancelarConfirm() { document.getElementById('confirmCard').className='confirm-card'; pendingActivity=null; }
+
+function setFiltro(f,btn) {
+  filtroActivo=f;
+  document.querySelectorAll('.filtro-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderLista();
+}
+
+function renderLista() {
+  let lista=filtroActivo==='todos'?actividades:actividades.filter(a=>a.categoria===filtroActivo);
+  document.getElementById('listaCount').textContent=lista.length;
+  if(!lista.length){
+    document.getElementById('actList').innerHTML=`<div class="empty-state"><div class="big">🎯</div><p>Sin actividades todavía.<br>Toca el micrófono o escribe para agregar.</p></div>`;
+    return;
+  }
+  const groups={};
+  lista.forEach(a=>{const k=a.fecha||'Sin fecha';if(!groups[k])groups[k]=[];groups[k].push(a);});
+  let html='';
+  Object.keys(groups).sort().forEach(fecha=>{
+    const label=fecha==='Sin fecha'?'Sin fecha':fechaLabel(fecha);
+    html+=`<div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 2px 4px">${label}</div>`;
+    groups[fecha].forEach(a=>{
+      const catClass={ErreEme:'tag-cat-erre',Helen:'tag-cat-helen',Familiar:'tag-cat-familiar',Personal:'tag-cat-personal','Lunch&Joy':'tag-cat-erre'}[a.categoria]||'tag-cat-erre';
+      html+=`<div class="act-item">
+        <input type="checkbox" class="act-checkbox" ${a.done?'checked':''} onchange="toggleDone('${a.id}')">
+        <div class="act-body">
+          <div class="act-happening" style="${a.done?'text-decoration:line-through;opacity:0.5':''}">${esc(a.happening)}</div>
+          <div class="act-meta">
+            <span class="meta-tag ${catClass}">${a.categoria}</span>
+            ${a.area?`<span class="meta-tag tag-lugar">📍 ${esc(a.area)}</span>`:''}
+            ${a.responsable?`<span class="meta-tag tag-lugar">👤 ${esc(a.responsable)}</span>`:''}
+            ${a.hora?`<span class="hora-tag">⏰ ${esc(a.hora)}</span>`:''}
+            ${a.synced?`<span class="sheets-badge">📊 Sheets</span>`:''}
+          </div>
+          ${a.notas?`<div style="font-size:0.75rem;color:var(--muted);margin-top:4px">📝 ${esc(a.notas)}</div>`:''}
+        </div>
+        <button class="act-del" onclick="eliminar('${a.id}')">🗑</button>
+      </div>`;
+    });
+  });
+  document.getElementById('actList').innerHTML=html;
+}
+
+function toggleDone(id){const a=actividades.find(x=>x.id===id);if(a){a.done=!a.done;localStorage.setItem('mbm-actividades',JSON.stringify(actividades));renderLista();}}
+function eliminar(id){if(!confirm('¿Eliminar?'))return;actividades=actividades.filter(x=>x.id!==id);localStorage.setItem('mbm-actividades',JSON.stringify(actividades));renderLista();showToast('🗑 Eliminada');}
+
+function esc(s){return(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function hoyISO(){return new Date().toISOString().split('T')[0];}
+function fechaLabel(iso){
+  const d=new Date(iso+'T12:00:00'),hoy=new Date(),man=new Date(hoy);man.setDate(man.getDate()+1);
+  if(d.toDateString()===hoy.toDateString())return'Hoy';
+  if(d.toDateString()===man.toDateString())return'Mañana';
+  return d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+// ── BOOT ──
+initSpeech();
+loadData();
+updateSyncBadge();
+
+// Apagar micrófono cuando el usuario sale o minimiza
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && isListening && recognition) {
+    recognition.stop();
+    isListening = false;
+    setMicState('idle');
+  }
+});
+
+window.addEventListener('beforeunload', () => {
+  if (isListening && recognition) {
+    recognition.stop();
+    isListening = false;
+  }
+});
+
+window.addEventListener('pagehide', () => {
+  if (isListening && recognition) {
+    recognition.stop();
+    isListening = false;
+  }
+});
+</script>
+</body>
+</html>
